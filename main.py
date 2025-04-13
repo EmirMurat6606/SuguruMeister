@@ -12,7 +12,8 @@ from src.suguru_exporter import SuguruExporter
 
 
 if __name__ == "__main__":
-    generate_suguru("11x4", "easy").print()
+    generate_suguru("4x5", "easy").print()
+
 
 
 

@@ -10,8 +10,8 @@ import copy
 import random
 
 # Standard Suguru formats
-# These are inspired by the https://Denksport.com Tectonic puzzles.
-standard_formats = ["5x4", "11x4", "5x9", "11x9"]
+# These are used for generating the Suguru puzzles
+standard_formats = ["5x4", "4x5"]
 
 # Difficulty levels
 difficulties = ["easy", "medium", "hard"]
@@ -30,28 +30,28 @@ def check_format(su_format: str) -> tuple[int, int]:
     return int(su_format.split("x")[0]), int(su_format.split("x")[1])
 
 
-def check_difficulty(difficulty: str) -> None:
+def check_difficulty(difficulty: str) -> str:
     """
     Checks if the difficulty is valid.
     :param: difficulty: The difficulty level to check.
     :raise: ValueError: If the difficulty is not valid.
+    :return: the difficulty level (if valid)
     """
     if difficulty not in difficulties:
         raise ValueError(f"Invalid difficulty: {difficulty}. Valid difficulties are: {difficulties}")
-
+    return difficulty
 
 class Suguru:
     def __init__(self, su_format: str, difficulty: str) -> None:
         """
         Initializes the Suguru object with the given format.
-        :param su_format: The format of the Suguru puzzle (Supported: 5x4, 5x9, 11x4, 11x9).
+        :param su_format: The format of the Suguru puzzle
         :param difficulty: The difficulty level of the Suguru puzzle (Supported: easy, medium, hard).
         """
         row_col = check_format(su_format)
-        check_difficulty(difficulty)
         self.rows: int = row_col[0]
         self.cols: int = row_col[1]
-        self.difficulty = difficulty
+        self.difficulty = check_difficulty(difficulty)
         self.grid: list[list[int]] = [[0 for _ in range(self.cols)] for _ in range(self.rows)]
         self.regions: list["Region"] = []
 
@@ -83,8 +83,8 @@ class Suguru:
 
     def add_regions(self, regions: list["Region"]) -> None:
         """
-        Adds a region to the Suguru object.
-        :param regions: The region to add.
+        Adds regions to the Suguru object.
+        :param regions: The regions to add.
         """
         self.regions = regions
         for region in regions:
@@ -93,10 +93,10 @@ class Suguru:
 
 
 class Region:
-    def __init__(self, name: str, size: int = 100):
+    def __init__(self, name: str, cells: set[tuple[int, int]]) -> None:
         self.name: str = name
-        self.size: int = size
-        self.cells = set()
+        self.cells: set = cells
+        self.size: int = len(cells)
 
     def __str__(self):
         return f"Region {self.name}: {self.cells}"
@@ -109,15 +109,13 @@ class Region:
         """
         return cell in self.cells
 
-    def add_cell(self, cell: tuple[int, int]) -> None:
+    def add_cells(self, cells: list[tuple[int, int]]) -> None:
         """
         Adds a cell to the region.
         :param: cell: The cell to add.
         """
-        if self.cells.__len__() >= self.size:
-            print("Region is full")
-            return
-        self.cells.add(cell)
+        self.cells = set(cells)
+        self.size = len(self.cells)
 
 
 def get_neighbors(cell: tuple[int, int], max_rows: int, max_cols: int) -> list[tuple[int, int]]:
@@ -130,26 +128,12 @@ def get_neighbors(cell: tuple[int, int], max_rows: int, max_cols: int) -> list[t
     """
     row, col = cell
     neighbors = []
-    for dir_r, dir_c in [(-1,0), (1,0), (0,-1), (0,1), (-1,-1), (-1,1), (1,-1), (1,1)]:
+    for dir_r, dir_c in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
         nr, nc = row + dir_r, col + dir_c
         if 0 <= nr < max_rows and 0 <= nc < max_cols:
             neighbors.append((nr, nc))
     return neighbors
 
-
-def resolve_region(region: Region, current_cell, cells: set[tuple[int, int]]) -> bool:
-    """
-    Checks if a region can locally be expanded. If not, the region is complete and size is shrunk.
-    :param region: the region to check
-    :param current_cell: the current cell of the region
-    :param cells: the cells that are not yet in a region
-    :return: True if the region is complete, False otherwise
-    """
-    if (current_cell[0] - 1, current_cell[1]) not in cells and (current_cell[0] + 1, current_cell[1]) not in cells and (
-    current_cell[0], current_cell[1] - 1) not in cells and (current_cell[0], current_cell[1] + 1) not in cells:
-        region.size = region.cells.__len__()
-        return True
-    return False
 
 def check_neighbours(suguru: Suguru, row: int, col: int):
     """
@@ -165,6 +149,7 @@ def check_neighbours(suguru: Suguru, row: int, col: int):
             return True
     return False
 
+
 def count_numbers(suguru: Suguru) -> bool:
     """
     Checks if the appearance of numbers is valid
@@ -177,6 +162,7 @@ def count_numbers(suguru: Suguru) -> bool:
             number_counts[suguru.grid[i][j]] = number_counts.get(suguru.grid[i][j], 0) + 1
 
     return number_counts[1] >= number_counts[2] >= number_counts[3] >= number_counts[4] >= number_counts[5]
+
 
 def fill_grid(suguru: Suguru, row: int, col: int):
     """
@@ -205,21 +191,139 @@ def fill_grid(suguru: Suguru, row: int, col: int):
     suguru.grid[row][col] = 0
     return False
 
+def grow_region(suguru, cells, region, used_cells, candidates, available_numbers, target_size) -> bool:
+    """
+    Helper function to expand a region in the Suguru grid.
+    :param suguru: the suguru object to modify
+    :param cells: the cells that are not yet assigned to a region
+    :param region: the current region being expanded
+    :param used_cells: the cells that have already been used in the region
+    :param candidates: the cells that can be used to expand the region
+    :param available_numbers: the numbers that can be used to fill the region
+    :param target_size: the target size of the region
+    :return: bool, True if the region can be expanded to the target size, False otherwise
+    """
+    if not available_numbers:
+        return True
 
-def generate_suguru(su_format: str, difficulty: str) -> Suguru:
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    random.shuffle(candidates)
+
+    for r, c in candidates:
+        random.shuffle(directions)
+        for dr, dc in directions:
+            nr, nc = r + dr, c + dc
+            neighbor = (nr, nc)
+            if (0 <= nr < suguru.rows and 0 <= nc < suguru.cols and
+                neighbor in cells and
+                neighbor not in used_cells and
+                suguru.grid[nr][nc] in available_numbers):
+
+                value = suguru.grid[nr][nc]
+                region.append(neighbor)
+                used_cells.add(neighbor)
+                new_candidates = candidates + [neighbor]
+                new_available = available_numbers.copy()
+                new_available.remove(value)
+
+                if grow_region(suguru, cells, region, used_cells, new_candidates, new_available, target_size):
+                    return True
+
+                # Backtrack
+                region.pop()
+                used_cells.remove(neighbor)
+
+    return False
+
+
+def divide_regions(suguru: Suguru, cells, regions, counter) -> tuple[bool, dict]:
+    """
+    Divides the Suguru grid into regions.
+    :param suguru: the suguru object to modify
+    :param cells: the cells that are not yet assigned to a region
+    :param regions: the regions that have been created so far
+    :param counter: a counter used for naming the regions
+    :return: bool, regions (True if all cells are assigned, False otherwise)
+    """
+
+    if not cells:
+        return True, regions
+
+    for number in reversed(range(1, 6)):
+        for cell in cells:
+            row, col = cell
+            if suguru.grid[row][col] == number:
+                region = [cell]
+                used_cells = {cell}
+                candidates = [(row, col)]
+                available_numbers = list(range(1, number))
+
+                success = grow_region(
+                    suguru, cells.copy(), region, used_cells, candidates, available_numbers, number - 1
+                )
+
+                if success:
+                    counter += 1
+                    for c in region:
+                        cells.remove(c)
+                    regions[str(counter)] = region
+                    solved, final_regions = divide_regions(suguru, cells, regions, counter)
+                    if solved:
+                        return True, final_regions
+                    # Backtrack
+                    for c in region:
+                        cells.append(c)
+                    del regions[str(counter)]
+                    counter -= 1
+
+    return False, regions
+
+def generate_suguru(su_format: str, difficulty: str):
     """
     Generates a Suguru puzzle with the given format and difficulty. The maximum region size is 5.
     :param su_format: The format of the Suguru puzzle (Supported: 5x4, 5x9, 11x4, 11x9).
     :param difficulty: The difficulty level of the Suguru puzzle (Supported: easy, medium, hard).
     :return: A Suguru object with the generated puzzle.
     """
-
     # Initialize the Suguru
     suguru = Suguru(su_format, difficulty)
+    print("Suguru initialized")
+    print("---------------------")
 
     # Fill the grid with random numbers
-    fill_grid(suguru, 0, 0)
+    # fill_grid(suguru, 0, 0)
+    # print("Suguru grid filled")
+    # suguru.print()
+    # print("---------------------")
+
+    """
+    4 1 3 4 5
+    3 2 5 1 2
+    4 1 3 4 5
+    2 5 2 1 3
+    """
+
+    suguru.grid = [[4, 1, 3, 4, 5],
+                   [3, 2, 5, 1, 2],
+                   [4, 1, 3, 4, 5],
+                   [2, 5, 2, 1, 3]]
+    print("Suguru grid filled")
+    suguru.print()
+    print("---------------------")
 
     # Divide grid into regions
+    regions = dict()
+    cells = [(i, j) for i in range(suguru.rows) for j in range(suguru.cols)]
+    regions = divide_regions(suguru, cells, regions, 0)[1]
 
+    print("Suguru regions divided")
+    print("---------------------")
+
+    print(regions)
+    # Convert the regions to Region objects
+    new_regions = []
+    for region in regions:
+        new_region = Region(region, regions[region])
+        new_regions.append(new_region)
+    suguru.add_regions(new_regions)
     return suguru
