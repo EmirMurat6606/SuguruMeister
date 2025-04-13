@@ -6,7 +6,7 @@ It is used to create and manipulate Suguru puzzles.
 @author: Emir Murat
 @date: 2025-04-11
 """
-
+import copy
 import random
 
 # Standard Suguru formats
@@ -93,10 +93,10 @@ class Suguru:
 
 
 class Region:
-    def __init__(self, name: str, size: int):
+    def __init__(self, name: str, size: int = 100):
         self.name: str = name
         self.size: int = size
-        self.cells: set[tuple[int, int]] = set()
+        self.cells = set()
 
     def __str__(self):
         return f"Region {self.name}: {self.cells}"
@@ -130,7 +130,7 @@ def get_neighbors(cell: tuple[int, int], max_rows: int, max_cols: int) -> list[t
     """
     row, col = cell
     neighbors = []
-    for dir_r, dir_c in [(-1,0), (1,0), (0,-1), (0,1)]:
+    for dir_r, dir_c in [(-1,0), (1,0), (0,-1), (0,1), (-1,-1), (-1,1), (1,-1), (1,1)]:
         nr, nc = row + dir_r, col + dir_c
         if 0 <= nr < max_rows and 0 <= nc < max_cols:
             neighbors.append((nr, nc))
@@ -151,6 +151,60 @@ def resolve_region(region: Region, current_cell, cells: set[tuple[int, int]]) ->
         return True
     return False
 
+def check_neighbours(suguru: Suguru, row: int, col: int):
+    """
+    Check if all surrounding cells have a different value
+    :param suguru: The Suguru object.
+    :param row: The row of the cell.
+    :param col: The column of the cell.
+    :return: True if the neighbors are valid, False otherwise.
+    """
+    neighbors = get_neighbors((row, col), suguru.rows, suguru.cols)
+    for neighbor in neighbors:
+        if suguru.grid[neighbor[0]][neighbor[1]] == suguru.grid[row][col]:
+            return True
+    return False
+
+def count_numbers(suguru: Suguru) -> bool:
+    """
+    Checks if the appearance of numbers is valid
+    :param suguru: the suguru to check
+    :return: True if the numbers are valid, False otherwise
+    """
+    number_counts = dict()
+    for i in range(suguru.rows):
+        for j in range(suguru.cols):
+            number_counts[suguru.grid[i][j]] = number_counts.get(suguru.grid[i][j], 0) + 1
+
+    return number_counts[1] >= number_counts[2] >= number_counts[3] >= number_counts[4] >= number_counts[5]
+
+def fill_grid(suguru: Suguru, row: int, col: int):
+    """
+    Recursive function to fill the Suguru grid.
+    :param suguru: The Suguru object that is being modified
+    :param row: The current row.
+    :param col: The current column.
+    """
+
+    if row == suguru.rows:
+        return count_numbers(suguru)
+
+    next_row = row + (col + 1) // suguru.cols
+    next_col = (col + 1) % suguru.cols
+
+    not_used = [1, 2, 3, 4, 5]
+    while not_used.__len__() > 0:
+        num = random.choice(not_used)
+        not_used.remove(num)
+        suguru.grid[row][col] = num
+
+        if not check_neighbours(suguru, row, col):
+            if fill_grid(suguru, next_row, next_col):
+                return True
+
+    suguru.grid[row][col] = 0
+    return False
+
 
 def generate_suguru(su_format: str, difficulty: str) -> Suguru:
     """
@@ -163,64 +217,9 @@ def generate_suguru(su_format: str, difficulty: str) -> Suguru:
     # Initialize the Suguru
     suguru = Suguru(su_format, difficulty)
 
-    # Difficulty level determines the probability of which region size to use
-    # ------------------------------------------------------------------------
-    probability: list[int] = []
-    sizes: list[int] = [1, 2, 3, 4, 5]
+    # Fill the grid with random numbers
+    fill_grid(suguru, 0, 0)
 
-    if difficulty == "easy":
-        probability = [5, 20, 20, 30, 25]
-    elif difficulty == "medium":
-        probability = [5, 15, 20, 20, 40]
-    elif difficulty == "hard":
-        probability = [5, 10, 15, 20, 50]
+    # Divide grid into regions
 
-    # Some useful variables and constants
-    # -------------------------------------------------------------------------
-
-    direction_map = {
-        0: (1, 0),  # down
-        1: (-1, 0),  # up
-        2: (0, -1),  # left
-        3: (0, 1),  # right
-    }
-
-    region_counter = 0
-    regions: list[Region] = []
-    cells = set((i, j) for i in range(suguru.rows) for j in range(suguru.cols))
-
-
-    # Divide the grid into regions.
-    # -------------------------------------------------------------------------
-
-    while cells.__len__() > 0:
-        # Ensure region size is not too big
-        region_size = random.choices(sizes, weights=probability, k=1)[0]
-        while region_size > cells.__len__():
-            region_size = random.choices(sizes, weights=probability, k=1)[0]
-
-        region = Region(str(region_counter), region_size)
-        cur_cell = cells.pop()
-        region.add_cell(cur_cell)
-
-        while region.cells.__len__() < region_size:
-            if resolve_region(region, cur_cell, cells):
-                break
-            direction = random.randint(0, 3)
-
-            dr, dc = direction_map[direction]
-            new_row = cur_cell[0] + dr
-            new_col = cur_cell[1] + dc
-
-            if 0 <= new_row < suguru.rows and 0 <= new_col < suguru.cols:
-                new_cell = (new_row, new_col)
-                if new_cell in cells:
-                    region.add_cell(new_cell)
-                    cells.remove(new_cell)
-                    cur_cell = new_cell
-
-        regions.append(region)
-        region_counter += 1
-
-    suguru.add_regions(regions)
     return suguru

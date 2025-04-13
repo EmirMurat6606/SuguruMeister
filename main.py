@@ -12,7 +12,8 @@ from src.suguru_exporter import SuguruExporter
 
 
 if __name__ == "__main__":
-    SuguruExporter.export_to_pdf("input.txt")
+    generate_suguru("11x4", "easy").print()
+
 
 
 
