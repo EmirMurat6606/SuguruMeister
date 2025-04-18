@@ -11,11 +11,20 @@ import random
 
 # Standard Suguru formats
 # These are used for generating the Suguru puzzles
-standard_formats = ["5x4", "4x5"]
+standard_formats = ["4x5", "5x4", "11x4", "5x9"]
+
 
 # Difficulty levels
 difficulties = ["easy", "medium", "hard"]
 
+
+def decode_format(su_format: str) -> tuple[int, int]:
+    """
+    Decodes the format string into a tuple of integers.
+    :param su_format: The format (represented as a string) to decode.
+    :return: A tuple containing the number of rows and columns.
+    """
+    return int(su_format.split("x")[0]), int(su_format.split("x")[1])
 
 def check_format(su_format: str) -> tuple[int, int]:
     """
@@ -27,7 +36,8 @@ def check_format(su_format: str) -> tuple[int, int]:
 
     if su_format not in standard_formats:
         raise ValueError(f"Invalid format: {su_format}. Valid formats are: {standard_formats}")
-    return int(su_format.split("x")[0]), int(su_format.split("x")[1])
+    else:
+        return decode_format(su_format)
 
 
 def check_difficulty(difficulty: str) -> str:
@@ -40,6 +50,7 @@ def check_difficulty(difficulty: str) -> str:
     if difficulty not in difficulties:
         raise ValueError(f"Invalid difficulty: {difficulty}. Valid difficulties are: {difficulties}")
     return difficulty
+
 
 class Suguru:
     def __init__(self, su_format: str, difficulty: str) -> None:
@@ -87,9 +98,7 @@ class Suguru:
         :param regions: The regions to add.
         """
         self.regions = regions
-        for region in regions:
-            for cell in region.cells:
-                self.grid[cell[0]][cell[1]] = region.name
+
 
 
 class Region:
@@ -161,8 +170,11 @@ def count_numbers(suguru: Suguru) -> bool:
         for j in range(suguru.cols):
             number_counts[suguru.grid[i][j]] = number_counts.get(suguru.grid[i][j], 0) + 1
 
-    return number_counts[1] >= number_counts[2] >= number_counts[3] >= number_counts[4] >= number_counts[5]
-
+    return (
+        number_counts.get(1, 0) >= number_counts.get(2, 0) >=
+        number_counts.get(3, 0) >= number_counts.get(4, 0) >=
+        number_counts.get(5, 0)
+    )
 
 def fill_grid(suguru: Suguru, row: int, col: int):
     """
@@ -191,6 +203,7 @@ def fill_grid(suguru: Suguru, row: int, col: int):
     suguru.grid[row][col] = 0
     return False
 
+
 def grow_region(suguru, cells, region, used_cells, candidates, available_numbers, target_size) -> bool:
     """
     Helper function to expand a region in the Suguru grid.
@@ -207,17 +220,15 @@ def grow_region(suguru, cells, region, used_cells, candidates, available_numbers
         return True
 
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    random.shuffle(candidates)
 
     for r, c in candidates:
-        random.shuffle(directions)
         for dr, dc in directions:
             nr, nc = r + dr, c + dc
             neighbor = (nr, nc)
             if (0 <= nr < suguru.rows and 0 <= nc < suguru.cols and
-                neighbor in cells and
-                neighbor not in used_cells and
-                suguru.grid[nr][nc] in available_numbers):
+                    neighbor in cells and
+                    neighbor not in used_cells and
+                    suguru.grid[nr][nc] in available_numbers):
 
                 value = suguru.grid[nr][nc]
                 region.append(neighbor)
@@ -245,12 +256,12 @@ def divide_regions(suguru: Suguru, cells, regions, counter) -> tuple[bool, dict]
     :param counter: a counter used for naming the regions
     :return: bool, regions (True if all cells are assigned, False otherwise)
     """
-
+    print("recursion with counter:"  + str(counter))
     if not cells:
         return True, regions
 
     for number in reversed(range(1, 6)):
-        for cell in cells:
+        for cell in list(cells):
             row, col = cell
             if suguru.grid[row][col] == number:
                 region = [cell]
@@ -278,6 +289,8 @@ def divide_regions(suguru: Suguru, cells, regions, counter) -> tuple[bool, dict]
 
     return False, regions
 
+
+
 def generate_suguru(su_format: str, difficulty: str):
     """
     Generates a Suguru puzzle with the given format and difficulty. The maximum region size is 5.
@@ -287,39 +300,15 @@ def generate_suguru(su_format: str, difficulty: str):
     """
     # Initialize the Suguru
     suguru = Suguru(su_format, difficulty)
-    print("Suguru initialized")
-    print("---------------------")
 
-    # Fill the grid with random numbers
-    # fill_grid(suguru, 0, 0)
-    # print("Suguru grid filled")
-    # suguru.print()
-    # print("---------------------")
-
-    """
-    4 1 3 4 5
-    3 2 5 1 2
-    4 1 3 4 5
-    2 5 2 1 3
-    """
-
-    suguru.grid = [[4, 1, 3, 4, 5],
-                   [3, 2, 5, 1, 2],
-                   [4, 1, 3, 4, 5],
-                   [2, 5, 2, 1, 3]]
-    print("Suguru grid filled")
-    suguru.print()
-    print("---------------------")
+    #  Fill the grid with random numbers
+    fill_grid(suguru, 0, 0)
 
     # Divide grid into regions
     regions = dict()
     cells = [(i, j) for i in range(suguru.rows) for j in range(suguru.cols)]
     regions = divide_regions(suguru, cells, regions, 0)[1]
 
-    print("Suguru regions divided")
-    print("---------------------")
-
-    print(regions)
     # Convert the regions to Region objects
     new_regions = []
     for region in regions:
